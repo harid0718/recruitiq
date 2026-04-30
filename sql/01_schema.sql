@@ -37,7 +37,7 @@ CREATE TABLE job_requisitions (
     id                  INT UNSIGNED        NOT NULL AUTO_INCREMENT,
     req_code            VARCHAR(20)         NOT NULL COMMENT 'Human-readable business key, e.g. REQ-2024-042',
     title               VARCHAR(150)        NOT NULL,
-    department          VARCHAR(100)        NOT NULL,
+    department          VARCHAR(100)                 COMMENT 'Nullable to allow synthetic data quality issues; production would enforce NOT NULL with form validation',
     team                VARCHAR(100)                 COMMENT 'Sub-team within the department',
     location            VARCHAR(150)                 COMMENT 'City name or "Remote"',
     employment_type     ENUM(
