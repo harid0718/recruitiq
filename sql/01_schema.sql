@@ -282,3 +282,105 @@ CREATE TABLE offers (
         ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Compensation offers per application; versioned to support negotiation history without data loss';
+
+
+ALTER TABLE job_requisitions MODIFY department VARCHAR(100) NULL 
+  COMMENT 'Nullable to allow synthetic data quality issues; production would enforce NOT NULL with form validation';
+  
+  
+  
+  -- 1. Total count
+SELECT COUNT(*) AS total_reqs FROM job_requisitions;
+
+-- 2. Department distribution (Engineering and Manufacturing should dominate)
+SELECT department, COUNT(*) AS count
+FROM job_requisitions
+GROUP BY department
+ORDER BY count DESC;
+
+-- 3. Status distribution
+SELECT status, COUNT(*) AS count
+FROM job_requisitions
+GROUP BY status
+ORDER BY count DESC;
+
+-- 4. Confirm deliberate data quality issues injected
+SELECT 
+  COUNT(*) AS total,
+  SUM(department IS NULL) AS missing_dept,
+  SUM(hiring_manager_name IS NULL) AS missing_hm
+FROM job_requisitions;
+
+
+-- 5. Visual check of 5 random rows
+SELECT req_code, title, department, location, status, salary_range_min, salary_range_max
+FROM job_requisitions
+ORDER BY RAND()
+LIMIT 5;
+
+
+-- 1. Total count
+SELECT COUNT(*) AS total_candidates FROM candidates;
+
+-- 2. Country distribution (US should be ~70%)
+SELECT location_country, COUNT(*) AS count, 
+       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM candidates), 1) AS pct
+FROM candidates
+GROUP BY location_country
+ORDER BY count DESC;
+
+-- 3. Education distribution
+SELECT highest_education_level, COUNT(*) AS count,
+       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM candidates), 1) AS pct
+FROM candidates
+GROUP BY highest_education_level
+ORDER BY count DESC;
+
+
+-- 4. Years of experience distribution (should be smooth)
+SELECT 
+  CASE 
+    WHEN years_of_experience < 2 THEN '0-2 yrs'
+    WHEN years_of_experience < 5 THEN '2-5 yrs'
+    WHEN years_of_experience < 10 THEN '5-10 yrs'
+    WHEN years_of_experience < 15 THEN '10-15 yrs'
+    ELSE '15+ yrs'
+  END AS exp_band,
+  COUNT(*) AS count
+FROM candidates
+GROUP BY exp_band
+ORDER BY MIN(years_of_experience);
+
+
+-- 5. Confirm LinkedIn URL distribution (~80% should have one)
+SELECT 
+  COUNT(*) AS total,
+  SUM(linkedin_url IS NOT NULL) AS has_linkedin,
+  ROUND(SUM(linkedin_url IS NOT NULL) * 100.0 / COUNT(*), 1) AS pct_with_linkedin
+FROM candidates;
+
+
+-- 6. Detect potential duplicates with same name and company (the injected dupes)
+SELECT first_name, last_name, current_company, COUNT(*) AS appearances
+FROM candidates
+GROUP BY first_name, last_name, current_company
+HAVING COUNT(*) > 1
+ORDER BY appearances DESC
+LIMIT 10;
+
+
+-- 7. Look at one example of a duplicate side-by-side
+WITH dupes AS (
+  SELECT first_name, last_name, current_company
+  FROM candidates
+  GROUP BY first_name, last_name, current_company
+  HAVING COUNT(*) > 1
+  LIMIT 1
+)
+SELECT c.id, c.first_name, c.last_name, c.email, c.phone, c.current_company
+FROM candidates c
+JOIN dupes d 
+  ON c.first_name = d.first_name 
+  AND c.last_name = d.last_name 
+  AND c.current_company = d.current_company
+ORDER BY c.id;
