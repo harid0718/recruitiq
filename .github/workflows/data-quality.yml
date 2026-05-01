@@ -1,0 +1,97 @@
+# Spins up a clean MySQL 8 instance, generates the full synthetic dataset
+# (~190k rows across 5 tables), then runs the pytest data-quality suite and
+# uploads the HTML report as a build artifact. Runs on every push and on PRs
+# targeting main, so data-quality regressions are caught before they merge.
+
+name: Data Quality CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: recruitiq
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -ptestpassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=6
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          pip install \
+            faker \
+            pandas \
+            mysql-connector-python \
+            python-dotenv \
+            pytest \
+            pytest-html
+
+      - name: Wait for MySQL to be fully ready
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -u root -ptestpassword --silent 2>/dev/null; then
+              echo "MySQL is ready."
+              break
+            fi
+            echo "Waiting for MySQL... ($i/30)"
+            sleep 1
+          done
+
+      - name: Apply database schema
+        run: mysql -h 127.0.0.1 -u root -ptestpassword recruitiq < sql/01_schema.sql
+
+      - name: Generate synthetic data
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: testpassword
+          DB_NAME: recruitiq
+        run: |
+          python scripts/generate_job_requisitions.py
+          python scripts/generate_candidates.py
+          python scripts/generate_applications.py
+          python scripts/generate_pipeline_stages.py
+          python scripts/generate_offers.py
+
+      - name: Run data quality tests
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: testpassword
+          DB_NAME: recruitiq
+        run: |
+          pytest tests/data_quality/ \
+            --html=tests/reports/report.html \
+            --self-contained-html
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-quality-report
+          path: tests/reports/report.html
