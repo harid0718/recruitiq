@@ -51,10 +51,6 @@ _APP_STATUS_WEIGHTS: list[int] = [25, 65, 5, 5]  # sums to 100
 
 _CHUNK_SIZE = 5_000
 
-# Column order in the return tuple of generate_application_row:
-# (candidate_id, requisition_id, source, referral_employee_name, status, applied_at)
-_STATUS_IDX = 4
-
 _INSERT_SQL = """
     INSERT INTO applications
         (candidate_id, requisition_id, source, referral_employee_name, status, applied_at)
@@ -154,26 +150,6 @@ def _generate_applied_at(opened_at: datetime, rng: random.Random) -> datetime:
     return min(applied_at, _END_DT)
 
 
-def _enforce_hired_cap(rows: list[tuple], max_hired: int, rng: random.Random) -> None:
-    """
-    Convert randomly selected excess 'hired' rows to 'rejected' so that the
-    total number of hired applications never exceeds the combined headcount of
-    all 'filled' requisitions.
-    """
-    hired_indices = [i for i, row in enumerate(rows) if row[_STATUS_IDX] == "hired"]
-    if len(hired_indices) <= max_hired:
-        return
-
-    n_excess = len(hired_indices) - max_hired
-    for i in rng.sample(hired_indices, n_excess):
-        row     = rows[i]
-        rows[i] = row[:_STATUS_IDX] + ("rejected",) + row[_STATUS_IDX + 1:]
-
-    print(
-        f"Hired cap applied: converted {n_excess} 'hired' → 'rejected' "
-        f"(cap: {max_hired} total filled headcount)."
-    )
-
 
 # =============================================================================
 # Core functions
@@ -192,15 +168,14 @@ def load_config() -> dict:
 
 def fetch_candidates_and_reqs(
     db_config: dict,
-) -> tuple[list[int], list[ReqInfo], int]:
+) -> tuple[list[int], list[ReqInfo]]:
     """
-    Query the database for all candidate IDs, all requisition metadata, and
-    the total filled headcount (the cap on 'hired' application statuses).
+    Query the database for all candidate IDs and all requisition metadata.
 
     Requisitions with NULL opened_at are excluded — applied_at cannot be
     derived without an anchor timestamp.
 
-    Returns (candidate_ids, req_infos, max_hired).
+    Returns (candidate_ids, req_infos).
     """
     connection = None
     cursor     = None
@@ -222,14 +197,7 @@ def fetch_candidates_and_reqs(
             for row in cursor.fetchall()
         ]
 
-        cursor.execute("""
-            SELECT COALESCE(SUM(headcount), 0)
-              FROM job_requisitions
-             WHERE status = 'filled'
-        """)
-        max_hired = int(cursor.fetchone()[0])
-
-        return candidate_ids, req_infos, max_hired
+        return candidate_ids, req_infos
 
     except Error as e:
         print(f"MySQL error while fetching data: {e}", file=sys.stderr)
@@ -247,16 +215,17 @@ def assign_applications(
     req_infos: list[ReqInfo],
     target: int,
     rng: random.Random,
-) -> list[tuple[int, ReqInfo]]:
+) -> tuple[list[tuple[int, ReqInfo]], set[tuple[int, int]]]:
     """
     Assign target (candidate_id, ReqInfo) pairs following the re-application
-    distribution.
+    distribution, then earmark exactly headcount pairs per filled requisition
+    as guaranteed hires.
 
     Requisitions are sampled *without replacement per candidate* so that the
-    UNIQUE(candidate_id, requisition_id) constraint is satisfied by construction
-    — no post-hoc deduplication required.
+    UNIQUE(candidate_id, requisition_id) constraint is satisfied by construction.
 
-    The returned list is shuffled so database rows are not grouped by candidate.
+    Returns (pairs, must_hire_set) where must_hire_set is a set of
+    (candidate_id, req_id) tuples that must be generated with status='hired'.
     """
     counts = _assign_counts(len(candidate_ids), target, len(req_infos), rng)
 
@@ -267,7 +236,26 @@ def assign_applications(
             pairs.append((candidate_id, req))
 
     rng.shuffle(pairs)
-    return pairs
+
+    # Guaranteed hire pass: collect candidate IDs per filled req, then earmark
+    # exactly headcount of them so every filled req has the right number of hires.
+    cands_by_req: dict[int, list[int]] = {
+        req.req_id: [] for req in req_infos if req.status == "filled"
+    }
+    for cid, req in pairs:
+        if req.req_id in cands_by_req:
+            cands_by_req[req.req_id].append(cid)
+
+    must_hire_set: set[tuple[int, int]] = set()
+    for req in req_infos:
+        if req.status != "filled":
+            continue
+        available    = cands_by_req.get(req.req_id, [])
+        n_to_earmark = min(req.headcount, len(available))
+        for cid in rng.sample(available, n_to_earmark):
+            must_hire_set.add((cid, req.req_id))
+
+    return pairs, must_hire_set
 
 
 def generate_application_row(
@@ -275,18 +263,19 @@ def generate_application_row(
     req: ReqInfo,
     rng: random.Random,
     faker_instance: Faker,
+    force_hired: bool = False,
 ) -> tuple:
     """
     Build one application tuple aligned with _INSERT_SQL column order:
     (candidate_id, requisition_id, source, referral_employee_name, status, applied_at)
 
     referral_employee_name is only populated when source == 'employee_referral'.
-    Status is assigned here; excess 'hired' rows are reconciled in bulk after
-    all rows are generated via _enforce_hired_cap().
+    If force_hired is True, status is set to 'hired' unconditionally — used for
+    pairs earmarked by the guaranteed hire pass in assign_applications().
     """
     source        = rng.choices(_SOURCES, weights=_SOURCE_WEIGHTS, k=1)[0]
     referral_name = faker_instance.name() if source == "employee_referral" else None
-    status        = rng.choices(_APP_STATUSES, weights=_APP_STATUS_WEIGHTS, k=1)[0]
+    status        = "hired" if force_hired else rng.choices(_APP_STATUSES, weights=_APP_STATUS_WEIGHTS, k=1)[0]
     applied_at    = _generate_applied_at(req.opened_at, rng)
 
     return (candidate_id, req.req_id, source, referral_name, status, applied_at)
@@ -337,11 +326,10 @@ def main() -> None:
     db_config = load_config()
 
     print("Fetching candidate IDs and requisition data from database...")
-    candidate_ids, req_infos, max_hired = fetch_candidates_and_reqs(db_config)
+    candidate_ids, req_infos = fetch_candidates_and_reqs(db_config)
     print(
         f"  Candidates: {len(candidate_ids)}  |  "
-        f"Requisitions: {len(req_infos)}  |  "
-        f"Hired cap: {max_hired}"
+        f"Requisitions: {len(req_infos)}"
     )
 
     target          = VOLUMES["applications"]
@@ -350,17 +338,16 @@ def main() -> None:
     Faker.seed(RANDOM_SEED)
 
     print(f"\nAssigning {target} applications across {len(candidate_ids)} candidates...")
-    pairs = assign_applications(candidate_ids, req_infos, target, rng)
+    pairs, must_hire_set = assign_applications(candidate_ids, req_infos, target, rng)
     print(f"Assigned {len(pairs)} (candidate, requisition) pairs.")
+    print(f"Guaranteed hire assignments: {len(must_hire_set)} (earmarked across filled requisitions).")
 
     print(f"Generating {len(pairs)} application rows...")
     rows: list[tuple] = []
     for i, (cid, req) in enumerate(pairs):
-        rows.append(generate_application_row(cid, req, rng, faker_instance))
+        rows.append(generate_application_row(cid, req, rng, faker_instance, force_hired=(cid, req.req_id) in must_hire_set))
         if (i + 1) % 5000 == 0:
             print(f"  Generated {i + 1} / {len(pairs)} rows...")
-
-    _enforce_hired_cap(rows, max_hired, rng)
 
     print(f"\nInserting into '{db_config['database']}'...")
     insert_to_db(rows, db_config)
