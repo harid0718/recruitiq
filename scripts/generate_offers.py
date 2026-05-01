@@ -444,12 +444,20 @@ def generate_all(
     all_rows:      list[tuple] = []
     n_v2_accepted: int         = 0
 
+    n_v2_skipped: int = 0
+
     for ctx in offer_contexts:
         v1 = generate_v1_offer(ctx, rng)
         all_rows.append(v1)
 
         # Counter-offer: 30% of compensation-declined v1 offers get a v2
         if v1[2] == "declined" and v1[12] == "compensation" and rng.random() < 0.30:
+            v1_responded_at: datetime = v1[11]
+            if v1_responded_at + timedelta(days=2) > _END_DT:
+                # Not enough runway before DATA_END_DATE to send a v2 at least
+                # 1 day after v1 was responded to — skip rather than clamp.
+                n_v2_skipped += 1
+                continue
             v2 = generate_v2_offer(v1, rng)
             all_rows.append(v2)
             if v2[2] == "accepted":
@@ -461,6 +469,11 @@ def generate_all(
     n_v2  = len(all_rows) - n_v1
 
     print(f"Generated {n_v1} v1 offers, {n_v2} v2 counter-offers.")
+    if n_v2_skipped:
+        print(
+            f"  Skipped {n_v2_skipped} v2 counter-offer(s): v1 responded too close "
+            f"to DATA_END_DATE to send a v2 without clamping past v1_responded_at."
+        )
 
     if n_v2_accepted:
         print(
