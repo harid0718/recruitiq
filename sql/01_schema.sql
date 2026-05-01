@@ -649,3 +649,11 @@ JOIN candidates c ON a.candidate_id = c.id
 JOIN job_requisitions jr ON a.requisition_id = jr.id
 WHERE o.application_id = (SELECT application_id FROM neg)
 ORDER BY o.offer_version;
+
+
+-- Clear offers table to regenerate cleanly
+DELETE FROM offers;
+
+TRUNCATE TABLE offers;
+
+SELECT COUNT(*) FROM offers;
