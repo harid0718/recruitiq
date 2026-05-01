@@ -384,3 +384,268 @@ JOIN dupes d
   AND c.last_name = d.last_name 
   AND c.current_company = d.current_company
 ORDER BY c.id;
+
+
+
+-- 1. Total count
+SELECT COUNT(*) AS total_applications FROM applications;
+
+
+-- 2. Applications per candidate distribution
+SELECT 
+  app_count,
+  COUNT(*) AS num_candidates,
+  ROUND(COUNT(*) * 100.0 / (SELECT COUNT(DISTINCT candidate_id) FROM applications), 1) AS pct
+FROM (
+  SELECT candidate_id, COUNT(*) AS app_count
+  FROM applications
+  GROUP BY candidate_id
+) sub
+GROUP BY app_count
+ORDER BY app_count;
+
+
+-- 3. Source channel distribution
+SELECT source, COUNT(*) AS count,
+       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM applications), 1) AS pct
+FROM applications
+GROUP BY source
+ORDER BY count DESC;
+
+
+-- 4. Status distribution
+SELECT status, COUNT(*) AS count,
+       ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM applications), 1) AS pct
+FROM applications
+GROUP BY status
+ORDER BY count DESC;
+
+
+-- 5. Verify referral_employee_name only populated when source = 'employee_referral'
+SELECT 
+  source,
+  SUM(referral_employee_name IS NOT NULL) AS with_referral,
+  SUM(referral_employee_name IS NULL) AS without_referral
+FROM applications
+GROUP BY source
+ORDER BY source;
+
+
+-- 6. CRITICAL: Verify no applied_at is before its requisition's opened_at
+SELECT COUNT(*) AS bad_dates
+FROM applications a
+JOIN job_requisitions r ON a.requisition_id = r.id
+WHERE a.applied_at < r.opened_at;
+
+-- 7. Verify hired cap was respected
+SELECT 
+  (SELECT SUM(headcount) FROM job_requisitions WHERE status = 'filled') AS max_allowed_hires,
+  (SELECT COUNT(*) FROM applications WHERE status = 'hired') AS actual_hires;
+  
+  
+-- 8. Sample multi-applicant candidate
+WITH multi_appliers AS (
+  SELECT candidate_id 
+  FROM applications 
+  GROUP BY candidate_id 
+  HAVING COUNT(*) >= 3 
+  LIMIT 1
+)
+SELECT 
+  c.first_name, c.last_name, c.email,
+  r.req_code, r.title, r.department,
+  a.source, a.status, a.applied_at
+FROM applications a
+JOIN candidates c ON a.candidate_id = c.id
+JOIN job_requisitions r ON a.requisition_id = r.id
+WHERE a.candidate_id = (SELECT candidate_id FROM multi_appliers)
+ORDER BY a.applied_at;
+
+
+
+-- 1. Total count
+SELECT COUNT(*) AS total_stages FROM pipeline_stages;
+
+-- 2. Stage funnel — count of applications that REACHED each stage
+SELECT stage_name, COUNT(*) AS reached
+FROM pipeline_stages
+GROUP BY stage_name
+ORDER BY 
+  FIELD(stage_name, 'applied', 'recruiter_screen', 'hiring_manager_screen',
+        'technical_assessment', 'take_home_assignment', 'panel_interview',
+        'executive_interview', 'background_check', 'offer', 'hired');
+        
+        
+-- 3. Average stages per application by final outcome
+SELECT 
+  a.status,
+  COUNT(DISTINCT a.id) AS applications,
+  COUNT(ps.id) AS total_stages,
+  ROUND(COUNT(ps.id) * 1.0 / COUNT(DISTINCT a.id), 2) AS avg_stages_per_app
+FROM applications a
+LEFT JOIN pipeline_stages ps ON a.id = ps.application_id
+GROUP BY a.status
+ORDER BY avg_stages_per_app DESC;
+
+
+-- 4. Verify ALL hired applications reached the 'hired' stage
+SELECT 
+  COUNT(DISTINCT a.id) AS hired_apps,
+  COUNT(DISTINCT CASE WHEN ps.stage_name = 'hired' THEN a.id END) AS reached_hired_stage
+FROM applications a
+LEFT JOIN pipeline_stages ps ON a.id = ps.application_id
+WHERE a.status = 'hired';
+
+
+
+-- 5. Verify active applications have NULL exited_at on their final (most recent) stage
+WITH latest_stages AS (
+  SELECT 
+    application_id,
+    MAX(stage_order) AS max_order
+  FROM pipeline_stages
+  GROUP BY application_id
+)
+SELECT 
+  a.status,
+  COUNT(*) AS total_final_stages,
+  SUM(ps.exited_at IS NULL) AS final_stages_null_exit
+FROM applications a
+JOIN latest_stages ls ON a.id = ls.application_id
+JOIN pipeline_stages ps ON ps.application_id = ls.application_id 
+  AND ps.stage_order = ls.max_order
+GROUP BY a.status;
+
+
+-- 6. Verify scorecard ratings only on interview stages
+SELECT 
+  stage_name,
+  SUM(scorecard_rating IS NOT NULL) AS with_scorecard,
+  SUM(scorecard_rating IS NULL) AS without_scorecard
+FROM pipeline_stages
+GROUP BY stage_name
+ORDER BY stage_name;
+
+
+-- 7. CRITICAL DATA QUALITY: count stages with entered_at before applied_at (injected)
+SELECT COUNT(*) AS bad_dates_detected
+FROM pipeline_stages ps
+JOIN applications a ON ps.application_id = a.id
+WHERE ps.entered_at < a.applied_at;
+
+
+-- 8. CRITICAL DATA QUALITY: count applications with stage_order out of chronological sync
+WITH stage_check AS (
+  SELECT 
+    application_id,
+    stage_order,
+    entered_at,
+    ROW_NUMBER() OVER (PARTITION BY application_id ORDER BY entered_at) AS chronological_order
+  FROM pipeline_stages
+)
+SELECT COUNT(DISTINCT application_id) AS apps_with_order_mismatch
+FROM stage_check
+WHERE stage_order != chronological_order;
+
+
+
+-- 9. Sample one hired candidate's full journey
+WITH one_hired AS (
+  SELECT id FROM applications WHERE status = 'hired' LIMIT 1
+)
+SELECT ps.stage_order, ps.stage_name, ps.entered_at, ps.exited_at, ps.outcome, ps.scorecard_rating
+FROM pipeline_stages ps
+WHERE ps.application_id = (SELECT id FROM one_hired)
+ORDER BY ps.stage_order;
+
+
+
+
+-- 1. Total count and status breakdown
+SELECT status, offer_version, COUNT(*) AS count
+FROM offers
+GROUP BY status, offer_version
+ORDER BY offer_version, status;
+
+
+
+-- 2. Verify all hired applications have an accepted offer
+SELECT 
+  COUNT(DISTINCT a.id) AS hired_apps,
+  COUNT(DISTINCT CASE WHEN o.status = 'accepted' AND o.offer_version = 1 THEN a.id END) AS with_v1_accepted
+FROM applications a
+LEFT JOIN offers o ON a.id = o.application_id
+WHERE a.status = 'hired';
+
+
+
+-- 3. Salary distribution by seniority
+SELECT 
+  jr.seniority_level,
+  COUNT(o.id) AS num_offers,
+  ROUND(AVG(o.base_salary), 0) AS avg_salary,
+  ROUND(MIN(o.base_salary), 0) AS min_salary,
+  ROUND(MAX(o.base_salary), 0) AS max_salary
+FROM offers o
+JOIN applications a ON o.application_id = a.id
+JOIN job_requisitions jr ON a.requisition_id = jr.id
+WHERE o.offer_version = 1
+GROUP BY jr.seniority_level
+ORDER BY avg_salary;
+
+
+-- 4. Decline reasons distribution
+SELECT decline_reason, COUNT(*) AS count
+FROM offers
+WHERE decline_reason IS NOT NULL
+GROUP BY decline_reason
+ORDER BY count DESC;
+
+
+-- 5. Counter-offer success rate (v1 declined → v2 outcome)
+SELECT 
+  v2.status AS v2_status,
+  COUNT(*) AS count,
+  ROUND(AVG(v2.base_salary - v1.base_salary), 0) AS avg_salary_increase,
+  ROUND(AVG((v2.base_salary - v1.base_salary) / v1.base_salary * 100), 1) AS avg_pct_increase
+FROM offers v2
+JOIN offers v1 ON v2.application_id = v1.application_id 
+  AND v2.offer_version = 2 AND v1.offer_version = 1
+GROUP BY v2.status;
+
+-- 6. CRITICAL DATA QUALITY: orphan offers (no matching pipeline stage)
+SELECT COUNT(*) AS orphan_offers
+FROM offers o
+LEFT JOIN pipeline_stages ps 
+  ON ps.application_id = o.application_id AND ps.stage_name = 'offer'
+WHERE ps.id IS NULL;
+
+
+-- 7. CRITICAL DATA QUALITY: v2 offers accepted while application status mismatches
+SELECT COUNT(*) AS sync_issues
+FROM offers o
+JOIN applications a ON o.application_id = a.id
+WHERE o.offer_version = 2 
+  AND o.status = 'accepted'
+  AND a.status IN ('rejected', 'withdrawn');
+  
+  
+  
+-- 8. Sample a complete negotiation story
+WITH neg AS (
+  SELECT application_id 
+  FROM offers 
+  WHERE offer_version = 2 AND status = 'accepted'
+  LIMIT 1
+)
+SELECT 
+  c.first_name, c.last_name, 
+  jr.title, jr.department,
+  o.offer_version, o.status, o.base_salary, o.decline_reason,
+  o.offer_sent_at, o.offer_responded_at
+FROM offers o
+JOIN applications a ON o.application_id = a.id
+JOIN candidates c ON a.candidate_id = c.id
+JOIN job_requisitions jr ON a.requisition_id = jr.id
+WHERE o.application_id = (SELECT application_id FROM neg)
+ORDER BY o.offer_version;
