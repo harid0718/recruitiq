@@ -1,0 +1,9 @@
+# Pinned dependencies for the recruitiq data generator and pytest data quality
+# test suite. Used by both local development and the GitHub Actions CI pipeline.
+
+faker>=20.0,<38.0
+pandas>=2.0,<3.0
+mysql-connector-python>=8.0,<10.0
+python-dotenv>=1.0,<2.0
+pytest>=8.0,<9.0
+pytest-html>=4.0,<5.0

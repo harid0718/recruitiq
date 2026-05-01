@@ -40,14 +40,7 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies
-        run: |
-          pip install \
-            faker \
-            pandas \
-            mysql-connector-python \
-            python-dotenv \
-            pytest \
-            pytest-html
+        run: pip install -r requirements.txt
 
       - name: Wait for MySQL to be fully ready
         run: |
