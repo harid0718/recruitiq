@@ -223,4 +223,4 @@ Honest scope for what's missing and where the project would go with more time.
 
 Built by [@harid0718](https://github.com/harid0718). Tableau dashboard published as [@hari4116](https://public.tableau.com/app/profile/hari4116).
 
-LinkedIn: <!-- add your LinkedIn URL here -->
+LinkedIn: [@hari-dave2002](https://www.linkedin.com/in/hari-dave2002/)
