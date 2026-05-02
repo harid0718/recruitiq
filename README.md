@@ -1,10 +1,10 @@
-# RecruitIQ — Recruiting Pipeline Analytics
+# RecruitIQ - Recruiting Pipeline Analytics
 
 A full-stack analytics project that takes a synthetic recruiting dataset from raw CSVs through a normalized relational database, an automated data quality test suite running in CI, a SQL analysis layer answering operational HR questions, and an executive dashboard for non-technical stakeholders.
 
 The project simulates the kind of work a People Analytics team does internally: building trustworthy data infrastructure first, then layering analysis and reporting on top of it.
 
-**Live dashboard:** [Tab 1 — Executive Summary on Tableau Public](https://public.tableau.com/app/profile/hari4116/viz/RecruitIQ-RecruitingPipelineAnalytics/Tab1-ExecutiveSummary)
+**Live dashboard:** [Tab 1 - Executive Summary on Tableau Public](https://public.tableau.com/app/profile/hari4116/viz/RecruitIQ-RecruitingPipelineAnalytics/Tab1-ExecutiveSummary)
 
 ![Dashboard screenshot](dashboard/screenshot_tab1_executive_summary.png)
 
@@ -40,7 +40,7 @@ job_requisitions ──< applications >── candidates
                           └──< offers
 ```
 
-All foreign keys use `ON DELETE RESTRICT`. Source channel sits on `applications` rather than `candidates` because a candidate can apply to different roles through different channels. Hiring manager and recruiter names are stored as denormalized strings on `job_requisitions` rather than referencing a separate employees table — a deliberate scope decision documented in the schema file.
+All foreign keys use `ON DELETE RESTRICT`. Source channel sits on `applications` rather than `candidates` because a candidate can apply to different roles through different channels. Hiring manager and recruiter names are stored as denormalized strings on `job_requisitions` rather than referencing a separate employees table - a deliberate scope decision documented in the schema file.
 
 ### Deliberately injected data quality issues
 
@@ -53,7 +53,7 @@ The generator scripts inject realistic data quality defects so the test suite ha
 - Offer salaries falling outside the requisition's salary band
 - Seniority mismatches between the offer and the requisition
 
-Each defect type has a bounded injection volume (e.g., 1–1500 duplicate candidates) and the corresponding test asserts the violation count stays within that band — so unexpected escalations beyond the intentional defects fail the build.
+Each defect type has a bounded injection volume (e.g., 1–1500 duplicate candidates) and the corresponding test asserts the violation count stays within that band - so unexpected escalations beyond the intentional defects fail the build.
 
 ---
 
@@ -62,7 +62,7 @@ Each defect type has a bounded injection volume (e.g., 1–1500 duplicate candid
 ```
 recruitiq/
 ├── .github/workflows/
-│   └── data_quality_ci.yml          # GitHub Actions CI — runs full test suite on every push
+│   └── data_quality_ci.yml          # GitHub Actions CI - runs full test suite on every push
 ├── sql/
 │   ├── 01_schema.sql                # DDL for all 5 tables with FK constraints
 │   └── analysis/
@@ -73,7 +73,7 @@ recruitiq/
 │       ├── 05_recruiter_workload.sql       # 5 queries: load distribution, closure rates
 │       └── 06_pipeline_diversity.sql       # 6 queries: education, geography, demographic lift
 ├── scripts/
-│   ├── config.py                    # Volumes, date ranges, defect injection rates — single source of truth
+│   ├── config.py                    # Volumes, date ranges, defect injection rates - single source of truth
 │   ├── generate_job_requisitions.py
 │   ├── generate_candidates.py
 │   ├── generate_applications.py
@@ -90,7 +90,7 @@ recruitiq/
 │   ├── test_uniqueness.py              # 7 tests
 │   └── test_business_logic.py          # 8 tests
 ├── dashboard/
-│   ├── recruitiq_executive_summary.twbx   # Tableau workbook (XML — see "Dashboard" section)
+│   ├── recruitiq_executive_summary.twbx   # Tableau workbook (XML - see "Dashboard" section)
 │   └── screenshot_tab1_executive_summary.png
 ├── pytest.ini
 ├── requirements.txt
@@ -179,7 +179,7 @@ Five categories of tests run against the live database. Each test queries MySQL 
 | **Uniqueness** | Candidate emails are unique after normalization; offer versions are sequential per application |
 | **Business logic** | Offer salaries fall inside the requisition's salary band; offer seniority matches requisition seniority; filled requisitions have at least one hire |
 
-Tests covering deliberately injected defects use imperative `pytest.xfail()` with count-bounded ranges. Unlike the `@pytest.mark.xfail` decorator, this approach lets unexpected escalations beyond the injected volume still fail the build — so a regression in the data pipeline that causes 5,000 duplicates instead of the expected 1,500 will surface immediately.
+Tests covering deliberately injected defects use imperative `pytest.xfail()` with count-bounded ranges. Unlike the `@pytest.mark.xfail` decorator, this approach lets unexpected escalations beyond the injected volume still fail the build - so a regression in the data pipeline that causes 5,000 duplicates instead of the expected 1,500 will surface immediately.
 
 The full suite runs in CI on every push and pull request. Test results are uploaded as an HTML report artifact on each run.
 
@@ -187,15 +187,15 @@ The full suite runs in CI on every push and pull request. Test results are uploa
 
 ## Dashboard
 
-**Tab 1 — Executive Summary** ([live link](https://public.tableau.com/app/profile/hari4116/viz/RecruitIQ-RecruitingPipelineAnalytics/Tab1-ExecutiveSummary))
+**Tab 1 - Executive Summary** ([live link](https://public.tableau.com/app/profile/hari4116/viz/RecruitIQ-RecruitingPipelineAnalytics/Tab1-ExecutiveSummary))
 
 Five charts answering the questions an HR leader walks into a meeting wanting to know:
 
-1. **Recruiting Funnel** — application-to-hire conversion at each pipeline stage
-2. **Time-to-Fill by Department** — median days from req opened to hire, sorted slowest-first
-3. **Source Effectiveness: Volume vs. Quality** — scatter plot positioning each sourcing channel by application volume against offer acceptance rate
-4. **Offer Outcomes** — accepted, declined, expired, pending, rescinded breakdown of V1 offers
-5. **Why Candidates Decline Offers** — decline reasons sorted by frequency, color-coded by whether they're addressable by HR
+1. **Recruiting Funnel** - application-to-hire conversion at each pipeline stage
+2. **Time-to-Fill by Department** - median days from req opened to hire, sorted slowest-first
+3. **Source Effectiveness: Volume vs. Quality** - scatter plot positioning each sourcing channel by application volume against offer acceptance rate
+4. **Offer Outcomes** - accepted, declined, expired, pending, rescinded breakdown of V1 offers
+5. **Why Candidates Decline Offers** - decline reasons sorted by frequency, color-coded by whether they're addressable by HR
 
 The decline-reason chart is the most actionable: 63% of declines cite compensation or competing offers, both of which are levers the recruiting org controls (salary benchmarking, faster offer cycles).
 
@@ -207,13 +207,13 @@ The decline-reason chart is the most actionable: 63% of declines cite compensati
 
 Honest scope for what's missing and where the project would go with more time.
 
-**Statistical rigor.** The current analysis is descriptive — counts, percentages, medians. The next layer is inferential: regression to test whether source-to-hire rates differ significantly across channels after controlling for department and seniority; survival analysis on time-to-fill; A/B-style framing for "did the new referral bonus actually work" type questions. The dataset supports all of this — I just haven't built it yet.
+**Statistical rigor.** The current analysis is descriptive - counts, percentages, medians. The next layer is inferential: regression to test whether source-to-hire rates differ significantly across channels after controlling for department and seniority; survival analysis on time-to-fill; A/B-style framing for "did the new referral bonus actually work" type questions. The dataset supports all of this - I just haven't built it yet.
 
 **Tab 2 of the dashboard.** Five more charts already have SQL written and CSVs generated: recruiter workload distribution, time-to-fill trend by quarter, pipeline diversity by education and geography, compensation by seniority level, and counter-offer success analysis. The infrastructure is ready; the Tableau assembly is the remaining work.
 
-**Real ATS integration.** The dataset is synthetic. Real recruiting data has weirdness Faker doesn't simulate — hiring managers who get reassigned mid-search, candidates who apply under different emails years apart, pipelines that get reset because of reorgs. Connecting to a real ATS API (Greenhouse, Lever, Workday) would be the next step in production.
+**Real ATS integration.** The dataset is synthetic. Real recruiting data has weirdness Faker doesn't simulate - hiring managers who get reassigned mid-search, candidates who apply under different emails years apart, pipelines that get reset because of reorgs. Connecting to a real ATS API (Greenhouse, Lever, Workday) would be the next step in production.
 
-**Incremental data testing.** The current CI regenerates the full dataset and runs the test suite. In a production environment with continuous ATS data ingestion, you'd want tests that run against incremental loads — checking new data quality without re-validating the entire history every time.
+**Incremental data testing.** The current CI regenerates the full dataset and runs the test suite. In a production environment with continuous ATS data ingestion, you'd want tests that run against incremental loads - checking new data quality without re-validating the entire history every time.
 
 **Stakeholder-facing documentation.** A data dictionary in the repo (currently only inline in `01_schema.sql`), a methodology writeup for each metric (especially the time-to-fill calculation, which has subtle definitional choices), and a glossary of recruiting terminology for non-technical readers.
 
