@@ -22,6 +22,8 @@ The project simulates the kind of work a People Analytics team does internally: 
 | `pipeline_stages` | 99,684 | Every stage transition for every application (applied → screen → … → hired) |
 | `offers` | 4,085 | Offers with versioning for counter-offers, salary, response status, decline reason |
 
+> Configured targets in `scripts/config.py` are 500 / 35,000 / 45,000 / ~110,000 / ~1,800. Actual row counts above reflect the latest generation run; pipeline stages and offers are derived during generation, so actuals diverge from the configured estimates.
+
 **Headline numbers from the dataset:**
 
 - 45,000 applications, 2,551 hires (5.67% overall conversion)
@@ -44,16 +46,18 @@ All foreign keys use `ON DELETE RESTRICT`. Source channel sits on `applications`
 
 ### Deliberately injected data quality issues
 
-The generator scripts inject realistic data quality defects so the test suite has something real to catch:
+The generator scripts inject realistic data quality defects so the test suite has something real to catch. All injection rates are configurable in `scripts/config.py`:
 
-- Duplicate candidate records with mutated emails (case changes, typo injection)
-- Open requisitions missing department or hiring manager
-- Pipeline stage events dated before their parent application
-- Out-of-order pipeline stage progressions
-- Offer salaries falling outside the requisition's salary band
-- Seniority mismatches between the offer and the requisition
+| Defect | Rate | What it simulates |
+|---|---:|---|
+| Duplicate candidates with mutated emails | 2.0% | Same person enters the system twice through different application paths |
+| Missing department on requisitions | 1.0% | Incomplete req intake forms |
+| Pipeline stage dated before application | 0.5% | Backdating errors from manual data entry |
+| Out-of-order pipeline stages | 1.0% | Stage progression broken by reorgs or manual edits |
+| Orphan offers (non-active application) | 0.3% | Stale offer records after pipeline state change |
+| Null hiring manager on requisition | 3.0% | Reqs opened before a hiring manager was assigned |
 
-Each defect type has a bounded injection volume (e.g., 1–1500 duplicate candidates) and the corresponding test asserts the violation count stays within that band — so unexpected escalations beyond the intentional defects fail the build.
+Each test that targets an injected defect uses imperative `pytest.xfail()` with count-bounded ranges. Unlike the `@pytest.mark.xfail` decorator, this approach lets unexpected escalations beyond the injected volume still fail the build — so a regression that causes 10x the expected duplicates surfaces immediately rather than getting silently absorbed.
 
 ---
 
@@ -206,6 +210,8 @@ The decline-reason chart is the most actionable: 63% of declines cite compensati
 ## What I'd do next
 
 Honest scope for what's missing and where the project would go with more time.
+
+**Additional defect injection.** Two defect types planned but not yet implemented: offer salaries falling outside the requisition's configured salary band, and seniority level mismatches between the offer and the parent requisition. Test scaffolding is already in place in `tests/data_quality/test_business_logic.py`; the generators need a small extension to produce the injected violations. Adding both would push defect coverage closer to what a production ATS quality framework would catch.
 
 **Statistical rigor.** The current analysis is descriptive — counts, percentages, medians. The next layer is inferential: regression to test whether source-to-hire rates differ significantly across channels after controlling for department and seniority; survival analysis on time-to-fill; A/B-style framing for "did the new referral bonus actually work" type questions. The dataset supports all of this — I just haven't built it yet.
 
