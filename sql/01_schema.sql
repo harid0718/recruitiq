@@ -657,3 +657,23 @@ DELETE FROM offers;
 TRUNCATE TABLE offers;
 
 SELECT COUNT(*) FROM offers;
+
+-- Temporarily disable FK checks for this operation only
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- Clear in reverse dependency order
+TRUNCATE TABLE offers;
+TRUNCATE TABLE pipeline_stages;
+TRUNCATE TABLE applications;
+
+-- Re-enable FK checks (CRITICAL — never leave this off)
+SET FOREIGN_KEY_CHECKS = 1;
+
+
+
+-- Verify all three are empty
+SELECT 'offers' AS tbl, COUNT(*) AS rows_left FROM offers
+UNION ALL
+SELECT 'pipeline_stages', COUNT(*) FROM pipeline_stages
+UNION ALL
+SELECT 'applications', COUNT(*) FROM applications;
