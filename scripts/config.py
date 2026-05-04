@@ -40,10 +40,10 @@ LOCATIONS = [
 # generated data so the test suite has something to catch.
 # bump to 0 to disable any of these.
 DATA_QUALITY_RATES = {
-    "duplicate_candidate": 0.02,
-    "missing_department": 0.01,
-    "invalid_interview_date": 0.005,
-    "orphan_offer": 0.003,
-    "out_of_order_stages": 0.01,
-    "null_hiring_manager": 0.03,
+    "duplicate_candidate_rate": 0.02,
+    "missing_department_rate": 0.01,
+    "invalid_interview_date_rate": 0.005,
+    "orphan_offer_rate": 0.003,
+    "out_of_order_stages_rate": 0.01,
+    "null_hiring_manager_rate": 0.03,
 }
