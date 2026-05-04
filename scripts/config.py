@@ -3,7 +3,7 @@
 from datetime import date
 
 # seed for faker + random; bump if you want different fake data
-SEED = 42
+RANDOM_SEED = 42
 
 # target row counts. pipeline_stages and offers come out of the
 # generator logic, so these are estimates not exact targets.
@@ -16,8 +16,8 @@ VOLUMES = {
 }
 
 # synthetic data spans Jan 2023 - Oct 2025
-START_DATE = date(2023, 1, 1)
-END_DATE = date(2025, 10, 31)
+DATA_START_DATE = date(2023, 1, 1)
+DATA_END_DATE = date(2025, 10, 31)
 
 DEPARTMENTS = [
     "Engineering", "Manufacturing", "Sales", "Recruiting",
@@ -39,7 +39,7 @@ LOCATIONS = [
 # rates of intentional data quality issues we inject into the
 # generated data so the test suite has something to catch.
 # bump to 0 to disable any of these.
-DEFECT_RATES = {
+DATA_QUALITY_RATES = {
     "duplicate_candidate": 0.02,
     "missing_department": 0.01,
     "invalid_interview_date": 0.005,
