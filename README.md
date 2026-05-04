@@ -4,7 +4,7 @@ A full-stack analytics project that takes a synthetic recruiting dataset from ra
 
 The project simulates the kind of work a People Analytics team does internally: building trustworthy data infrastructure first, then layering analysis and reporting on top of it.
 
-**Live dashboard:** [Tab 1 - Executive Summary on Tableau Public](https://public.tableau.com/app/profile/hari4116/viz/RecruitIQ-RecruitingPipelineAnalytics/Tab1-ExecutiveSummary)
+**Live dashboard:** [Tab 1 - Executive Summary on Tableau Public](https://public.tableau.com/views/RecruitIQ-RecruitingPipelineAnalytics/Tab1-ExecutiveSummary?:language=en-US&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)
 
 ![Dashboard screenshot](dashboard/screenshot_tab1_executive_summary.png)
 
