@@ -9,9 +9,6 @@ intentional data-quality issues used for analytics exercises.
 
 from datetime import date
 
-# =============================================================================
-# Reproducibility
-# =============================================================================
 
 RANDOM_SEED: int = 42  # Fixed seed ensures identical output on every run
 
